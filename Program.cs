@@ -13,65 +13,45 @@ namespace ConsoleApplication
     {
         public static void Main(string[] args)
         {
-            IEnumerable<string> dirs;
-            string fileFilter;
-
-            if (args.Length == 1)
+            if (args.Length < 2)
             {
-                // We are assuming resgen is run with 'dotnet run pathToResxFile.resx'.
-                fileFilter = Path.GetFileName(args[0]);
-                string moduleDirectory = Path.GetDirectoryName(Path.GetDirectoryName(args[0]));
-                dirs = new List<string>() { moduleDirectory };
-            }
-            else
-            {
-                // We are assuming resgen is run with 'dotnet run'
-                // so we can use relative path to get a parent directory
-                // to process all *.resx files in all project subdirectories.
-                fileFilter = "*.resx";
-                dirs = Directory.EnumerateDirectories("..");
+                Console.WriteLine("Usage : resgen <pathToResxFile.resx> [<resourcesNamespace>] [<classFullName>] [<outCsFilePath>]");
+                Console.WriteLine("Example : resgen StringResources.resx System.Fabric.Strings.StringResources System.Fabric.Strings.StringResources StringResources.cs");
+                Environment.Exit(1);
             }
 
-            foreach (string folder in dirs)
-            {
-                string moduleName = Path.GetFileName(folder);
-                string resourcePath = Path.Combine(folder, "resources");
+            // setup variables.
+            string resxPath = args[0];
+            string folder = Path.GetDirectoryName(args[0]);
+            string resourcesNamespace = (args.Length > 1) ? args[1] : Path.GetFileName(folder);
+            string classFullName = (args.Length > 2) ? args[2] : Path.GetFileNameWithoutExtension(resxPath);
+            string outPath = (args.Length > 3) ? args[3] : Path.Combine(folder, classFullName + ".cs");
 
-                if (Directory.Exists(resourcePath))
-                {
-                    string genFolder = Path.Combine(folder, "gen");
-                    if (!Directory.Exists(genFolder))
-                    {
-                        Directory.CreateDirectory(genFolder);
-                    }
+            Console.WriteLine("Resource Namespace : {0}, ClassFullName : {1}, CsFilePath : {2}", resourcesNamespace, classFullName, outPath);
 
-                    foreach (string resxPath in Directory.EnumerateFiles(resourcePath, fileFilter))
-                    {
-                        string className = Path.GetFileNameWithoutExtension(resxPath);
-                        string sourceCode = GetStronglyTypeCsFileForResx(resxPath, moduleName, className);
-                        string outPath = Path.Combine(genFolder, className + ".cs");
-                        Console.WriteLine("ResGen for " + outPath);
-                        File.WriteAllText(outPath, sourceCode);
-                    }
-                }
-            }
+            // generate code.
+            string sourceCode = GetStronglyTypeCsFileForResx(resxPath, resourcesNamespace, classFullName);
+
+            // write C# file.
+            Console.WriteLine("ResGen for " + outPath);
+            File.WriteAllText(outPath, sourceCode);
         }
 
-        private static string GetStronglyTypeCsFileForResx(string xmlPath, string moduleName, string className)
+        private static string GetStronglyTypeCsFileForResx(string xmlPath, string resourcesNamespace, string classFullName)
         {
             // Example
             //
-            // className = Full.Name.Of.The.ClassFoo
+            // classFullName = Full.Name.Of.The.ClassFoo
             // shortClassName = ClassFoo
             // namespaceName = Full.Name.Of.The
 
-            string shortClassName = className;
+            string shortClassName = classFullName;
             string namespaceName = null;
-            int lastIndexOfDot = className.LastIndexOf('.');
+            int lastIndexOfDot = classFullName.LastIndexOf('.');
             if (lastIndexOfDot != -1)
             {
-                namespaceName = className.Substring(0, lastIndexOfDot);
-                shortClassName = className.Substring(lastIndexOfDot + 1);
+                namespaceName = classFullName.Substring(0, lastIndexOfDot);
+                shortClassName = classFullName.Substring(lastIndexOfDot + 1);
             }
 
             var entries = new StringBuilder();
@@ -83,7 +63,7 @@ namespace ConsoleApplication
                 entries.AppendFormat(ENTRY, name, value);
             }
 
-            string bodyCode = string.Format(BODY, shortClassName, moduleName, entries.ToString(), className);
+            string bodyCode = string.Format(BODY, shortClassName, resourcesNamespace, entries.ToString());
             if (namespaceName != null)
             {
                 bodyCode = string.Format(NAMESPACE, namespaceName, bodyCode);
@@ -140,7 +120,7 @@ internal class {0} {{
     internal static global::System.Resources.ResourceManager ResourceManager {{
         get {{
             if (object.ReferenceEquals(resourceMan, null)) {{
-                global::System.Resources.ResourceManager temp = new global::System.Resources.ResourceManager(""{1}.resources.{3}"", typeof({0}).Assembly);
+                global::System.Resources.ResourceManager temp = new global::System.Resources.ResourceManager(""{1}"", typeof({0}).Assembly);
                 resourceMan = temp;
             }}
             return resourceMan;
